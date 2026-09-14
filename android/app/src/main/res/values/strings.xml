@@ -7,5 +7,9 @@
     <string name="codec_label">Video codec</string>
     <string name="mode_label">Use the tablet as</string>
     <string name="audio_label">Play computer audio on</string>
-    <string name="usb_hint">USB: run <b>adb reverse tcp:7741 tcp:7741</b> on the computer, then connect to 127.0.0.1</string>
+    <string name="conn_label">Connection</string>
+    <string name="scan">Scan for computers</string>
+    <string name="conn_usb_hint">USB: enable <b>USB tethering</b> (Settings → Connections → Mobile Hotspot and Tethering), plug into the computer, then tap Scan. Or, with USB debugging on, run <b>adb reverse tcp:7741 tcp:7741</b> on the computer and this uses 127.0.0.1.</string>
+    <string name="conn_wifi_hint">Make sure the tablet and computer are on the same Wi-Fi, then tap Scan.</string>
+    <string name="conn_manual_hint">Enter the computer IP address (run <b>ip -4 addr</b> on it) and port 7741.</string>
 </resources>

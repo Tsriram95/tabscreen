@@ -46,12 +46,16 @@ git clone https://github.com/USER/tabscreen && cd tabscreen && ./install.sh
 ### Tablet
 
 Download `tabscreen.apk` from the [Releases page](https://github.com/USER/tabscreen/releases) and install it
-(enable "install from unknown sources"). Open it, choose **Use the tablet as** (Second screen / Touchpad) and
-**Play computer audio on** (Computer / Tablet / Both), enter the computer's address and tap **Connect**.
+(enable "install from unknown sources"). Open it, pick a **Connection**, then **Use the tablet as**
+(Second screen / Touchpad) and **Play computer audio on** (Computer / Tablet / Both), and tap **Connect**.
 
-- **Wi-Fi**: use the IP the installer printed (`ip -4 addr`), port 7741.
-- **USB-C** (lowest latency, charges the tablet): enable USB debugging, then on the computer run
-  `adb reverse tcp:7741 tcp:7741` and connect the app to `127.0.0.1`.
+**Connection** options (no IP typing needed):
+- **Wi-Fi (auto-detect)** — tap *Scan*; the app finds computers running the server on the same network by UDP
+  broadcast and lists them by hostname. Pick one and connect.
+- **USB** — lowest latency, charges the tablet. Two ways:
+  - *USB tethering*: turn it on (Settings → Connections → Mobile Hotspot and Tethering), plug in, tap *Scan*.
+  - *adb reverse*: with USB debugging on, run `adb reverse tcp:7741 tcp:7741` on the computer; the app uses `127.0.0.1`.
+- **Manual IP** — type the address (`ip -4 addr`) and port, for when broadcast is blocked (e.g. some corporate Wi-Fi).
 
 ## Running it persistently
 

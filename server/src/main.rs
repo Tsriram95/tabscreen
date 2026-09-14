@@ -1,4 +1,5 @@
 mod audio;
+mod discovery;
 mod kde;
 mod protocol;
 mod trust;
@@ -80,6 +81,9 @@ fn main() -> Result<()> {
     }
     let listener = TcpListener::bind((args.bind.as_str(), args.port))
         .with_context(|| format!("binding {}:{}", args.bind, args.port))?;
+    if let Err(e) = discovery::spawn(args.port) {
+        log::warn!("auto-discovery unavailable: {e:#} — enter the IP manually in the app");
+    }
     log::info!("listening on {}:{} — connect from the tablet app", args.bind, args.port);
     for conn in listener.incoming() {
         match conn {

@@ -17,67 +17,115 @@
             android:textAppearance="?attr/textAppearanceHeadlineMedium"
             android:layout_marginBottom="24dp" />
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="400dp"
+        <TextView
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
-            android:hint="@string/host_hint">
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/host"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textUri"
-                android:imeOptions="actionNext" />
-        </com.google.android.material.textfield.TextInputLayout>
+            android:text="@string/conn_label" />
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:layout_width="400dp"
+        <Spinner
+            android:id="@+id/connMode"
+            android:layout_width="420dp"
+            android:layout_height="wrap_content" />
+
+        <!-- Wi-Fi auto-detect: list of discovered computers + scan button -->
+        <LinearLayout
+            android:id="@+id/discoverBox"
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:hint="@string/port_hint">
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/port"
+            android:orientation="vertical"
+            android:layout_marginTop="8dp">
+
+            <Spinner
+                android:id="@+id/discovered"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <Button
+                android:id="@+id/scan"
+                style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:inputType="number"
-                android:imeOptions="actionDone" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:layout_marginTop="8dp"
+                android:text="@string/scan" />
+        </LinearLayout>
+
+        <!-- Manual: host + port -->
+        <LinearLayout
+            android:id="@+id/manualBox"
+            android:layout_width="420dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/host_hint">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/host"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="textUri"
+                    android:imeOptions="actionNext" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:hint="@string/port_hint">
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/port"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:imeOptions="actionDone" />
+            </com.google.android.material.textfield.TextInputLayout>
+        </LinearLayout>
 
         <TextView
-            android:layout_width="400dp"
+            android:id="@+id/connHint"
+            android:layout_width="420dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textAppearance="?attr/textAppearanceBodySmall" />
+
+        <TextView
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/mode_label" />
 
         <Spinner
             android:id="@+id/mode"
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content" />
 
         <TextView
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/audio_label" />
 
         <Spinner
             android:id="@+id/audio"
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content" />
 
         <TextView
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:text="@string/codec_label" />
 
         <Spinner
             android:id="@+id/codec"
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content" />
 
         <CheckBox
             android:id="@+id/sendTouch"
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:checked="true"
@@ -85,24 +133,16 @@
 
         <Button
             android:id="@+id/connect"
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:text="@string/connect" />
 
         <TextView
             android:id="@+id/status"
-            android:layout_width="400dp"
+            android:layout_width="420dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:textColor="?attr/colorError" />
-
-        <TextView
-            android:layout_width="400dp"
-            android:layout_height="wrap_content"
-            android:id="@+id/usbHint"
-            android:layout_marginTop="24dp"
-            android:text="@string/usb_hint"
-            android:textAppearance="?attr/textAppearanceBodySmall" />
     </LinearLayout>
 </ScrollView>

@@ -31,3 +31,12 @@ Touch actions: 0 down, 1 move, 2 up, 3 cancel.
 | 0x84 | PONG          | `u64 t_ns` |
 
 The server sends STREAM_CONFIG once after HELLO, then only keyframes until the client is known to have received one (it simply skips delta frames before the first IDR).
+
+## Discovery (UDP)
+
+Zero-config discovery over UDP port **7742**, independent of the TCP protocol above.
+
+- Client → broadcast `TABSCREEN?` (10 ASCII bytes) to `255.255.255.255:7742` and each interface broadcast address.
+- Server → unicast reply: `TABSCREEN!` (10 bytes), `u16 tcp_port` (LE), then the UTF-8 hostname.
+
+Needs no mDNS/Avahi and works over any shared broadcast domain, including a USB-tethering link.
