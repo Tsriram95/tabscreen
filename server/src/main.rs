@@ -36,9 +36,9 @@ struct Args {
     /// Refresh rate of the virtual monitor (default: what the tablet reports, e.g. 120)
     #[arg(long)]
     refresh: Option<u32>,
-    /// Virtual output scale factor (KDE "global scale" for that monitor)
-    #[arg(long, default_value_t = 1.5)]
-    scale: f64,
+    /// Virtual output scale factor: "auto" (from the tablet's DPI) or a number like 1.5, 2
+    #[arg(long, default_value = "auto")]
+    scale: String,
     /// Override the virtual output width in pixels (default: what the tablet reports)
     #[arg(long)]
     width: Option<i32>,
@@ -119,6 +119,29 @@ struct Screen {
     _vo: VirtualOutput,
 }
 
+/// Pick the KDE scale for the virtual monitor. "auto" targets a comfortable
+/// ~155 logical DPI from the tablet's real pixel density, so a dense phone
+/// screen gets a larger scale (readable UI) and a big tablet a smaller one,
+/// rounded to KDE's 0.25 steps and clamped to a sane range.
+fn resolve_scale(arg: &str, hello: &Hello, width: i32, height: i32) -> f64 {
+    if let Ok(v) = arg.parse::<f64>() {
+        return v.clamp(0.5, 4.0);
+    }
+    if arg != "auto" {
+        log::warn!("unrecognised --scale '{arg}', using auto");
+    }
+    let diag_px = ((width as f64).powi(2) + (height as f64).powi(2)).sqrt();
+    let diag_in = (((hello.width_mm as f64).powi(2) + (hello.height_mm as f64).powi(2)).sqrt() / 25.4).max(0.1);
+    let dpi = diag_px / diag_in;
+    if !dpi.is_finite() || dpi < 50.0 || dpi > 1000.0 {
+        return 1.5; // bogus DPI reported; fall back to a middle-of-the-road scale
+    }
+    let scale = (dpi / 155.0 * 4.0).round() / 4.0;
+    let scale = scale.clamp(1.0, 3.0);
+    log::info!("auto scale: {dpi:.0} dpi -> {scale}");
+    scale
+}
+
 fn start_screen(hello: &Hello, args: &Args, tx: &mpsc::Sender<Outgoing>) -> Result<Screen> {
     let codec = {
         let supported = |c: Codec| hello.codecs & (1 << (c.wire() - 1)) != 0;
@@ -131,17 +154,20 @@ fn start_screen(hello: &Hello, args: &Args, tx: &mpsc::Sender<Outgoing>) -> Resu
             Codec::H264
         }
     };
-    let width = args.width.unwrap_or(hello.width as i32);
-    let height = args.height.unwrap_or(hello.height as i32);
+    // H.264/HEVC encoders need even dimensions; some devices report odd sizes.
+    let width = args.width.unwrap_or(hello.width as i32) & !1;
+    let height = args.height.unwrap_or(hello.height as i32) & !1;
     if width < 64 || height < 64 {
         bail!("implausible display size {width}x{height}");
     }
 
+    let scale = resolve_scale(&args.scale, &hello, width, height);
+
     // 1. Virtual monitor (KWin adds it to the desktop immediately).
     let pointer = if args.no_cursor { Pointer::Hidden } else { Pointer::Embedded };
-    let vo = VirtualOutput::create(&args.name, "Tablet second screen", width, height, args.scale, pointer)?;
+    let vo = VirtualOutput::create(&args.name, "Tablet second screen", width, height, scale, pointer)?;
     let output_name = kde::resolve_output_name(&vo.name);
-    if let Err(e) = kde::set_output_scale(&output_name, args.scale) {
+    if let Err(e) = kde::set_output_scale(&output_name, scale) {
         log::warn!("{e:#}");
     }
     let refresh = args.refresh.unwrap_or(hello.refresh as u32).clamp(30, 240);
@@ -278,6 +304,7 @@ fn handle_client(mut sock: TcpStream, args: &Args) -> Result<()> {
             }
             MSG_TOUCH => {
                 let events = parse_touch_batch(&payload)?;
+                log::debug!("MSG_TOUCH: {} events (touchpad={})", events.len(), touchpad.is_some());
                 if let Some(tp) = touchpad.as_mut() {
                     for e in &events {
                         tp.handle(e)?;

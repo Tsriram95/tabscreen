@@ -529,6 +529,7 @@ impl Touchpad {
                                 self.dev.emit(EV_REL, REL_Y, my);
                             }
                             self.dev.sync()?;
+                            log::debug!("touchpad move dx={mx} dy={my}");
                         }
                     }
                     2 => self.emit_scroll(dx, dy),
