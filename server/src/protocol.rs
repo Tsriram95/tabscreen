@@ -11,6 +11,7 @@ pub const MSG_PEN: u8 = 0x02;
 pub const MSG_TOUCH: u8 = 0x03;
 pub const MSG_PING: u8 = 0x04;
 pub const MSG_KEYFRAME_REQUEST: u8 = 0x05;
+pub const MSG_DISCOVER: u8 = 0x06;
 
 // server -> client
 pub const MSG_STREAM_CONFIG: u8 = 0x81;

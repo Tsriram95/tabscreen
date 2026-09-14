@@ -213,6 +213,17 @@ fn start_touchpad(_hello: &Hello) -> Result<uinput::Touchpad> {
 fn handle_client(mut sock: TcpStream, args: &Args) -> Result<()> {
     sock.set_nodelay(true)?;
     let (ty, payload) = read_frame(&mut sock)?;
+    if ty == MSG_DISCOVER {
+        // A discovery probe over the TCP port (works even when UDP :7742 is firewalled):
+        // reply with the hostname and close, without starting a session.
+        let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|_| "linux".to_string());
+        let _ = sock.write_all(&frame(MSG_DISCOVER, hostname.as_bytes()));
+        let _ = sock.shutdown(Shutdown::Both);
+        log::debug!("answered TCP discovery probe");
+        return Ok(());
+    }
     if ty != MSG_HELLO {
         bail!("expected HELLO, got message type 0x{ty:02x}");
     }

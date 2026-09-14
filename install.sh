@@ -84,6 +84,22 @@ if [ ! -w /dev/uinput ]; then
   fi
 fi
 
+# --- 4b. firewall -----------------------------------------------------------
+open_firewall(){
+  # TCP 7741 (stream + TCP discovery) and UDP 7742 (broadcast discovery).
+  if systemctl is-active --quiet firewalld 2>/dev/null && command -v firewall-cmd >/dev/null; then
+    info "opening ports in firewalld (sudo)…"
+    sudo firewall-cmd --permanent --add-port=7741/tcp --add-port=7742/udp >/dev/null 2>&1 || true
+    sudo firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+  if command -v ufw >/dev/null && sudo ufw status 2>/dev/null | grep -qi active; then
+    info "opening ports in ufw (sudo)…"
+    sudo ufw allow 7741/tcp >/dev/null 2>&1 || true
+    sudo ufw allow 7742/udp >/dev/null 2>&1 || true
+  fi
+}
+open_firewall
+
 # --- 5. user service --------------------------------------------------------
 UNIT_DIR="$HOME/.config/systemd/user"
 mkdir -p "$UNIT_DIR"

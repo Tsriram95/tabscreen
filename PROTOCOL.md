@@ -14,6 +14,7 @@ frame := u8 type, u32 payload_len, payload[payload_len]
 | 0x02 | PEN    | `u16 count`, then `count` × 36 bytes: `u64 t_ns`, `u8 action`, `u8 tool`, `u8 buttons`, `u8 pad`, `f32 x`, `f32 y`, `f32 pressure`, `f32 tilt_x_deg`, `f32 tilt_y_deg`, `f32 distance` |
 | 0x03 | TOUCH  | `u16 count`, then `count` × 28 bytes: `u64 t_ns`, `u8 action`, `u8 pointer_id`, `u16 pad`, `f32 x`, `f32 y`, `f32 pressure`, `f32 major` |
 | 0x04 | PING   | `u64 t_ns` (echoed back) |
+| 0x06 | DISCOVER | empty — TCP discovery probe; server replies with a DISCOVER frame carrying its UTF-8 hostname, then closes (works when UDP :7742 is firewalled) |
 | 0x05 | KEYFRAME_REQUEST | empty — ask the encoder for an IDR with headers (sent when the decoder is (re)created) |
 
 `x`, `y` are normalised to `0..1` of the streamed image. `pressure`, `distance`, `major` are `0..1`.
