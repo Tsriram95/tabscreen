@@ -64,16 +64,18 @@ pub struct Encoder {
 
 fn encoder_chain(codec: Codec, s: &Settings) -> String {
     let gop = s.fps.max(1) * 2;
+    // Low-latency common options. `b-frames=0` reduces latency but vaav1enc has
+    // no such property, so it is only added for the H.26x encoders.
     let common = format!(
-        "rate-control=cbr bitrate={} target-usage=6 key-int-max={gop} b-frames=0 ref-frames=1",
+        "rate-control=cbr bitrate={} target-usage=6 key-int-max={gop} ref-frames=1",
         s.bitrate_kbps
     );
     match codec {
         Codec::H264 => format!(
-            "vah264enc {common} ! h264parse config-interval=-1 ! video/x-h264,stream-format=byte-stream,alignment=au,profile=main"
+            "vah264enc {common} b-frames=0 ! h264parse config-interval=-1 ! video/x-h264,stream-format=byte-stream,alignment=au,profile=main"
         ),
         Codec::Hevc => format!(
-            "vah265enc {common} ! h265parse config-interval=-1 ! video/x-h265,stream-format=byte-stream,alignment=au"
+            "vah265enc {common} b-frames=0 ! h265parse config-interval=-1 ! video/x-h265,stream-format=byte-stream,alignment=au"
         ),
         Codec::Av1 => format!("vaav1enc {common} ! av1parse ! video/x-av1,stream-format=obu-stream,alignment=tu"),
     }
