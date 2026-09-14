@@ -2,7 +2,7 @@
 # TabScreen server installer for KDE Plasma (Wayland).
 # Builds the server, installs it as a per-user service, and grants /dev/uinput access.
 #
-#   curl -fsSL https://raw.githubusercontent.com/USER/tabscreen/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Tsriram95/tabscreen/main/install.sh | bash
 # or, from a clone:
 #   ./install.sh
 set -euo pipefail
@@ -12,7 +12,7 @@ info(){ echo "${GRN}==>${RST} $*"; }
 warn(){ echo "${YEL}warning:${RST} $*" >&2; }
 die(){ echo "${RED}error:${RST} $*" >&2; exit 1; }
 
-REPO_URL="${TABSCREEN_REPO:-https://github.com/USER/tabscreen}"
+REPO_URL="${TABSCREEN_REPO:-https://github.com/Tsriram95/tabscreen}"
 PREFIX="${PREFIX:-$HOME/.local}"
 BIN="$PREFIX/bin/tabscreen-server"
 

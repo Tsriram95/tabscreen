@@ -30,7 +30,7 @@ and it disappears when the tablet disconnects. No kernel modules, no `xrandr` ha
 ### Computer (one command)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/USER/tabscreen/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Tsriram95/tabscreen/main/install.sh | bash
 ```
 
 This installs dependencies, builds the server, grants `/dev/uinput` access, and enables a per-user
@@ -40,12 +40,12 @@ Log out and back in once after the first install so pen/touch input works (adds 
 From a clone instead:
 
 ```sh
-git clone https://github.com/USER/tabscreen && cd tabscreen && ./install.sh
+git clone https://github.com/Tsriram95/tabscreen && cd tabscreen && ./install.sh
 ```
 
 ### Tablet
 
-Download `tabscreen.apk` from the [Releases page](https://github.com/USER/tabscreen/releases) and install it
+Download `tabscreen.apk` from the [Releases page](https://github.com/Tsriram95/tabscreen/releases) and install it
 (enable "install from unknown sources"). Open it, pick a **Connection**, then **Use the tablet as**
 (Second screen / Touchpad) and **Play computer audio on** (Computer / Tablet / Both), and tap **Connect**.
 
