@@ -1,0 +1,75 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore signing key
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Build APK
+        working-directory: android
+        env:
+          TABSCREEN_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' && format('{0}/release.jks', runner.temp) || '' }}
+          TABSCREEN_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          TABSCREEN_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          TABSCREEN_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          [ -z "$TABSCREEN_KEYSTORE" ] && unset TABSCREEN_KEYSTORE
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../tabscreen.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tabscreen-apk
+          path: tabscreen.apk
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tabscreen.apk
+          generate_release_notes: true
+
+  server:
+    name: Linux server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libwayland-dev pkg-config
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: server
+      - name: Build
+        working-directory: server
+        run: |
+          cargo build --release
+          cp target/release/tabscreen-server ../tabscreen-server-linux-x86_64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tabscreen-server-linux-x86_64
+          path: tabscreen-server-linux-x86_64
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: tabscreen-server-linux-x86_64

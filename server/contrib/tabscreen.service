@@ -1,0 +1,14 @@
+# Installed to ~/.config/systemd/user/tabscreen.service by install.sh.
+# Runs inside your graphical session so it can reach KWin and PipeWire.
+[Unit]
+Description=TabScreen second-screen server
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=__BIN__
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

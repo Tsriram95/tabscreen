@@ -1,0 +1,15 @@
+# build output
+server/target/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.kotlin/
+.idea/
+*.iml
+
+# signing material — MUST NOT be committed
+*.jks
+*.keystore
+keystore.properties
+local.properties

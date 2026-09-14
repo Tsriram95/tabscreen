@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">TabScreen</string>
+    <string name="host_hint">Computer address (IP or hostname)</string>
+    <string name="port_hint">Port</string>
+    <string name="connect">Connect</string>
+    <string name="send_touch">Send finger touches as a touchscreen</string>
+    <string name="codec_label">Video codec</string>
+    <string name="mode_label">Use the tablet as</string>
+    <string name="audio_label">Play computer audio on</string>
+    <string name="usb_hint">USB: run <b>adb reverse tcp:7741 tcp:7741</b> on the computer, then connect to 127.0.0.1</string>
+</resources>

@@ -1,0 +1,24 @@
+[package]
+name = "tabscreen-server"
+version = "0.1.0"
+edition = "2021"
+description = "Use an Android tablet as a second screen (with stylus input) for KDE Plasma Wayland"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+env_logger = "0.11"
+log = "0.4"
+libc = "0.2"
+wayland-client = "0.31"
+wayland-scanner = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
+gstreamer = "0.24"
+gstreamer-app = "0.24"
+gstreamer-video = "0.24"
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+debug = 1
