@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
         val sendTouch = findViewById<CheckBox>(R.id.sendTouch)
         val mode = findViewById<Spinner>(R.id.mode)
         val audio = findViewById<Spinner>(R.id.audio)
+        val pair = findViewById<EditText>(R.id.pair)
         val status = findViewById<TextView>(R.id.status)
 
         connMode.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item,
@@ -49,6 +50,7 @@ class MainActivity : AppCompatActivity() {
         host.setText(prefs.getString("host", ""))
         port.setText(prefs.getInt("port", 7741).toString())
         sendTouch.isChecked = prefs.getBoolean("sendTouch", true)
+        pair.setText(prefs.getString("pair", ""))
         mode.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Second screen (with S Pen)", "Touchpad"))
         mode.setSelection(prefs.getInt("mode", Protocol.MODE_SCREEN))
         audio.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Computer (no audio streaming)", "Tablet (computer goes silent)", "Both"))
@@ -121,9 +123,12 @@ class MainActivity : AppCompatActivity() {
                     else { status.text = "Tap Scan and pick a computer first"; return@setOnClickListener }
                 } else { h = sel.host; p = sel.port }
             }
+            val pairCode = pair.text.toString().trim()
+            if (pairCode.isEmpty()) { status.text = "Enter the pairing code shown on the computer"; return@setOnClickListener }
             val c = options[codec.selectedItemPosition].id
             prefs.edit().putString("host", h).putInt("port", p).putInt("codec", c).putBoolean("sendTouch", sendTouch.isChecked)
-                .putInt("mode", mode.selectedItemPosition).putInt("audio", audio.selectedItemPosition).putInt("connMode", cm).apply()
+                .putInt("mode", mode.selectedItemPosition).putInt("audio", audio.selectedItemPosition).putInt("connMode", cm)
+                .putString("pair", pairCode).apply()
             startActivity(Intent(this, StreamActivity::class.java).apply {
                 putExtra(StreamActivity.EXTRA_HOST, h)
                 putExtra(StreamActivity.EXTRA_PORT, p)
@@ -131,6 +136,7 @@ class MainActivity : AppCompatActivity() {
                 putExtra(StreamActivity.EXTRA_SEND_TOUCH, sendTouch.isChecked)
                 putExtra(StreamActivity.EXTRA_MODE, mode.selectedItemPosition)
                 putExtra(StreamActivity.EXTRA_AUDIO, audio.selectedItemPosition)
+                putExtra(StreamActivity.EXTRA_PAIR, pairCode)
             })
         }
     }

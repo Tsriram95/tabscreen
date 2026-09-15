@@ -57,6 +57,15 @@ Download `tabscreen.apk` from the [Releases page](https://github.com/Tsriram95/t
   - *adb reverse*: with USB debugging on, run `adb reverse tcp:7741 tcp:7741` on the computer; the app uses `127.0.0.1`.
 - **Manual IP** — type the address (`ip -4 addr`) and port, for when broadcast is blocked (e.g. some corporate Wi-Fi).
 
+## Security
+
+Every connection is **encrypted with TLS** and gated by a **pairing code**. On first run the server
+generates a self-signed certificate and a pairing code (both stored in `~/.config/tabscreen/`, shown in
+the tray, the logs, or via `tabscreen-server --show-pair`). Enter that code once in the app. The code is a
+shared secret bound by HMAC to the server's certificate fingerprint, so an unauthorized client is refused
+and a man-in-the-middle presenting a different certificate cannot authenticate. This makes it safe to use on
+untrusted/public networks. (Discovery probes remain unauthenticated but only reveal the hostname.)
+
 ## System tray
 
 While the server runs, a **TabScreen** icon sits in the KDE system tray. It shows the current status

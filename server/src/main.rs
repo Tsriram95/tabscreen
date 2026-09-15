@@ -2,6 +2,7 @@ mod audio;
 mod discovery;
 mod kde;
 mod protocol;
+mod security;
 mod trust;
 mod tray;
 mod uinput;
@@ -126,6 +127,9 @@ struct Args {
     /// Do not show a system-tray icon
     #[arg(long)]
     no_tray: bool,
+    /// Print the pairing code and exit
+    #[arg(long)]
+    show_pair: bool,
     /// Full GStreamer pipeline override ("{node}" is replaced; must end in `appsink name=sink`)
     #[arg(long)]
     gst: Option<String>,
@@ -141,6 +145,15 @@ enum Outgoing {
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let args = Args::parse();
+
+    // TLS certificate + pairing code (persisted in ~/.config/tabscreen).
+    let creds = Arc::new(security::Credentials::load_or_create().context("loading credentials")?);
+    if args.show_pair {
+        // Just print the code and exit (for `tabscreen-server --show-pair`).
+        println!("{}", creds.pairing_code_grouped());
+        return Ok(());
+    }
+
     if let Err(e) = trust::ensure_registered() {
         log::warn!("could not register with KWin: {e:#}");
     }
@@ -153,21 +166,20 @@ fn main() -> Result<()> {
     let control = SessionControl::default();
     control.set_status("Waiting for a tablet…".into());
     if !args.no_tray {
-        if let Err(e) = tray::spawn(control.clone()) {
+        if let Err(e) = tray::spawn(control.clone(), creds.pairing_code_grouped()) {
             log::warn!("system-tray icon unavailable: {e} — use `systemctl --user stop tabscreen` or --no-tray");
         }
     }
 
     log::info!("listening on {}:{} — connect from the tablet app", args.bind, args.port);
+    log::info!("pairing code (enter once in the app): {}", creds.pairing_code_grouped());
     for conn in listener.incoming() {
         match conn {
             Ok(sock) => {
                 let peer = sock.peer_addr().map(|a| a.to_string()).unwrap_or_default();
-                log::info!("client connected from {peer}");
-                if let Err(e) = handle_client(sock, &args, &control) {
-                    log::error!("session with {peer} ended: {e:#}");
-                } else {
-                    log::info!("session with {peer} ended");
+                let creds = creds.clone();
+                if let Err(e) = handle_client(sock, &args, &control, &creds) {
+                    log::warn!("session with {peer} ended: {e:#}");
                 }
                 control.cleared("Waiting for a tablet…".into());
             }
@@ -177,7 +189,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn read_frame(sock: &mut TcpStream) -> Result<(u8, Vec<u8>)> {
+fn read_frame<R: Read>(sock: &mut R) -> Result<(u8, Vec<u8>)> {
     let mut hdr = [0u8; 5];
     sock.read_exact(&mut hdr)?;
     let len = u32::from_le_bytes(hdr[1..5].try_into().unwrap()) as usize;
@@ -285,20 +297,43 @@ fn start_touchpad(_hello: &Hello) -> Result<uinput::Touchpad> {
     uinput::Touchpad::new()
 }
 
-fn handle_client(mut sock: TcpStream, args: &Args, control: &SessionControl) -> Result<()> {
+fn handle_client(
+    mut sock: TcpStream,
+    args: &Args,
+    control: &SessionControl,
+    creds: &Arc<security::Credentials>,
+) -> Result<()> {
     sock.set_nodelay(true)?;
-    let (ty, payload) = read_frame(&mut sock)?;
-    if ty == MSG_DISCOVER {
-        // A discovery probe over the TCP port (works even when UDP :7742 is firewalled):
-        // reply with the hostname and close, without starting a session.
-        let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|_| "linux".to_string());
-        let _ = sock.write_all(&frame(MSG_DISCOVER, hostname.as_bytes()));
-        let _ = sock.shutdown(Shutdown::Both);
-        log::debug!("answered TCP discovery probe");
+
+    // Peek the first byte: a TLS ClientHello starts with 0x16. Anything else is a
+    // plaintext discovery probe (kept cheap so the app's subnet scan is fast).
+    let mut first = [0u8; 1];
+    if sock.peek(&mut first)? == 0 {
         return Ok(());
     }
+    if first[0] != 0x16 {
+        let (ty, _p) = read_frame(&mut sock)?;
+        if ty == MSG_DISCOVER {
+            let hostname = std::fs::read_to_string("/proc/sys/kernel/hostname")
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|_| "linux".to_string());
+            let _ = sock.write_all(&frame(MSG_DISCOVER, hostname.as_bytes()));
+        }
+        let _ = sock.shutdown(Shutdown::Both);
+        return Ok(());
+    }
+
+    // TLS + pairing handshake.
+    let raw = sock.try_clone()?; // for the tray to force-close the session
+    sock.set_read_timeout(None)?;
+    let conn = rustls::ServerConnection::new(creds.tls_config.clone()).context("TLS setup")?;
+    let mut tls = rustls::StreamOwned::new(conn, sock);
+    if !security::server_handshake(&mut tls, creds)? {
+        return Ok(()); // was a discovery probe over TLS
+    }
+    log::info!("tablet paired and authenticated");
+
+    let (ty, payload) = read_frame(&mut tls)?;
     if ty != MSG_HELLO {
         bail!("expected HELLO, got message type 0x{ty:02x}");
     }
@@ -309,48 +344,11 @@ fn handle_client(mut sock: TcpStream, args: &Args, control: &SessionControl) -> 
     let hello = parse_hello(&payload)?;
     log::info!("tablet: {hello:?}");
 
-    // Register the session with the tray so it can show status and disconnect.
-    let peer = sock.peer_addr().map(|a| a.ip().to_string()).unwrap_or_else(|_| "tablet".into());
+    let peer = raw.peer_addr().map(|a| a.ip().to_string()).unwrap_or_else(|_| "tablet".into());
     let mode_label = if hello.mode == MODE_TOUCHPAD { "Touchpad" } else { "Second screen" };
-    control.connected(sock.try_clone()?, format!("Connected: {peer} — {mode_label}"));
+    control.connected(raw.try_clone()?, format!("Connected: {peer} — {mode_label}"));
 
     let (tx, rx) = mpsc::channel::<Outgoing>();
-
-    // Writer thread: serialises video/audio/control messages onto the socket.
-    let mut writer_sock = sock.try_clone()?;
-    let write_thread = std::thread::Builder::new().name("net-tx".into()).spawn(move || {
-        let mut sent_keyframe = false;
-        let (mut frames, mut bytes) = (0u64, 0u64);
-        let mut last_report = std::time::Instant::now();
-        while let Ok(msg) = rx.recv() {
-            let buf = match msg {
-                Outgoing::Video(f) => {
-                    if !sent_keyframe {
-                        if !f.keyframe {
-                            continue;
-                        }
-                        sent_keyframe = true;
-                    }
-                    frames += 1;
-                    video_frame(f.pts_ns, f.keyframe, &f.data)
-                }
-                Outgoing::Audio(a) => audio_chunk(a.pts_ns, &a.data),
-                Outgoing::Raw(v) => v,
-            };
-            if writer_sock.write_all(&buf).is_err() {
-                let _ = writer_sock.shutdown(Shutdown::Both);
-                break;
-            }
-            bytes += buf.len() as u64;
-            if last_report.elapsed().as_secs() >= 5 {
-                let secs = last_report.elapsed().as_secs_f64();
-                log::info!("tx: {:.1} fps, {:.1} Mbit/s", frames as f64 / secs, bytes as f64 * 8.0 / 1e6 / secs);
-                frames = 0;
-                bytes = 0;
-                last_report = std::time::Instant::now();
-            }
-        }
-    })?;
 
     let mut screen: Option<Screen> = None;
     let mut touchpad: Option<uinput::Touchpad> = None;
@@ -379,50 +377,105 @@ fn handle_client(mut sock: TcpStream, args: &Args, control: &SessionControl) -> 
         }
     }
 
-    // Input loop.
-    let tx_ctl = Arc::new(Mutex::new(tx));
-    let result = loop {
+    // TLS can't be read and written from two threads, so this is a single-threaded
+    // event loop: it drains outgoing video/audio, then reads input with a short
+    // timeout so writes never wait long behind a blocked read.
+    tls.sock.set_read_timeout(Some(std::time::Duration::from_millis(3)))?;
+    let mut inbuf: Vec<u8> = Vec::with_capacity(1 << 16);
+    let mut tmp = [0u8; 1 << 16];
+    let mut sent_keyframe = false;
+    let (mut frames, mut bytes) = (0u64, 0u64);
+    let mut last_report = std::time::Instant::now();
+
+    let result: Result<()> = loop {
         if screen.as_ref().map(|s| s._vo.is_closed()).unwrap_or(false) {
             break Err(anyhow!("KWin removed the virtual output"));
         }
-        let (ty, payload) = match read_frame(&mut sock) {
-            Ok(f) => f,
-            Err(e) => break Err(e),
-        };
-        match ty {
-            MSG_PEN => {
-                if let Some(s) = screen.as_mut() {
-                    for e in parse_pen_batch(&payload)? {
-                        s.pen.handle(&e)?;
+
+        // 1. Send everything the producers have queued.
+        let mut werr = None;
+        loop {
+            match rx.try_recv() {
+                Ok(msg) => {
+                    let buf = match msg {
+                        Outgoing::Video(f) => {
+                            if !sent_keyframe {
+                                if !f.keyframe {
+                                    continue;
+                                }
+                                sent_keyframe = true;
+                            }
+                            frames += 1;
+                            video_frame(f.pts_ns, f.keyframe, &f.data)
+                        }
+                        Outgoing::Audio(a) => audio_chunk(a.pts_ns, &a.data),
+                        Outgoing::Raw(v) => v,
+                    };
+                    bytes += buf.len() as u64;
+                    if let Err(e) = tls.write_all(&buf) {
+                        werr = Some(e);
+                        break;
                     }
                 }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => break,
             }
-            MSG_TOUCH => {
-                let events = parse_touch_batch(&payload)?;
-                log::debug!("MSG_TOUCH: {} events (touchpad={})", events.len(), touchpad.is_some());
-                if let Some(tp) = touchpad.as_mut() {
-                    for e in &events {
-                        tp.handle(e)?;
-                    }
-                } else if let Some(t) = screen.as_mut().and_then(|s| s.touch.as_mut()) {
-                    for e in &events {
-                        t.handle(e)?;
-                    }
-                }
+        }
+        if let Some(e) = werr {
+            break Err(e.into());
+        }
+        if let Err(e) = tls.flush() {
+            break Err(e.into());
+        }
+        if last_report.elapsed().as_secs() >= 5 {
+            let secs = last_report.elapsed().as_secs_f64();
+            log::info!("tx: {:.1} fps, {:.1} Mbit/s", frames as f64 / secs, bytes as f64 * 8.0 / 1e6 / secs);
+            frames = 0;
+            bytes = 0;
+            last_report = std::time::Instant::now();
+        }
+
+        // 2. Read whatever input is available.
+        match tls.read(&mut tmp) {
+            Ok(0) => break Ok(()),
+            Ok(n) => inbuf.extend_from_slice(&tmp[..n]),
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(e) => break Err(e.into()),
+        }
+
+        // 3. Dispatch any complete frames.
+        let mut pos = 0;
+        let mut fatal: Option<anyhow::Error> = None;
+        loop {
+            if inbuf.len() - pos < 5 {
+                break;
             }
-            MSG_PING => {
-                let _ = tx_ctl.lock().unwrap().send(Outgoing::Raw(frame(MSG_PONG, &payload)));
+            let len = u32::from_le_bytes(inbuf[pos + 1..pos + 5].try_into().unwrap()) as usize;
+            if len > 1 << 20 {
+                fatal = Some(anyhow!("oversized frame ({len} bytes)"));
+                break;
             }
-            MSG_KEYFRAME_REQUEST => {
-                if let Some(s) = screen.as_ref() {
-                    s.encoder.request_keyframe();
-                }
+            if inbuf.len() - pos < 5 + len {
+                break;
             }
-            other => log::warn!("unknown message type 0x{other:02x} ({} bytes)", payload.len()),
+            let ty = inbuf[pos];
+            let payload = &inbuf[pos + 5..pos + 5 + len];
+            if let Err(e) = dispatch(ty, payload, &mut screen, &mut touchpad, &tx) {
+                fatal = Some(e);
+                pos += 5 + len;
+                break;
+            }
+            pos += 5 + len;
+        }
+        if pos > 0 {
+            inbuf.drain(0..pos);
+        }
+        if let Some(e) = fatal {
+            break Err(e);
         }
     };
 
-    // Teardown: lift fingers/pen, stop producers (closing the channel ends the writer), release the monitor.
+    // Teardown: lift fingers/pen, stop producers, release the monitor.
     if let Some(t) = touchpad.as_mut() {
         let _ = t.release_all();
     }
@@ -432,12 +485,10 @@ fn handle_client(mut sock: TcpStream, args: &Args, control: &SessionControl) -> 
         }
         let _ = s.pen.handle(&PenEvent { t_ns: 0, action: PEN_CANCEL, tool: TOOL_PEN, buttons: 0, x: 0.0, y: 0.0, pressure: 0.0, tilt_x: 0.0, tilt_y: 0.0, distance: 0.0 });
     }
-    let _ = sock.shutdown(Shutdown::Both);
+    let _ = raw.shutdown(Shutdown::Both);
     drop(_audio);
     drop(screen);
     drop(touchpad);
-    drop(tx_ctl);
-    let _ = write_thread.join();
 
     match result {
         Err(e) if e.downcast_ref::<std::io::Error>().is_some() => {
@@ -446,4 +497,45 @@ fn handle_client(mut sock: TcpStream, args: &Args, control: &SessionControl) -> 
         }
         r => r,
     }
+}
+
+/// Handle one decoded input frame from the tablet.
+fn dispatch(
+    ty: u8,
+    payload: &[u8],
+    screen: &mut Option<Screen>,
+    touchpad: &mut Option<uinput::Touchpad>,
+    tx: &mpsc::Sender<Outgoing>,
+) -> Result<()> {
+    match ty {
+        MSG_PEN => {
+            if let Some(s) = screen.as_mut() {
+                for e in parse_pen_batch(payload)? {
+                    s.pen.handle(&e)?;
+                }
+            }
+        }
+        MSG_TOUCH => {
+            let events = parse_touch_batch(payload)?;
+            if let Some(tp) = touchpad.as_mut() {
+                for e in &events {
+                    tp.handle(e)?;
+                }
+            } else if let Some(t) = screen.as_mut().and_then(|s| s.touch.as_mut()) {
+                for e in &events {
+                    t.handle(e)?;
+                }
+            }
+        }
+        MSG_PING => {
+            let _ = tx.send(Outgoing::Raw(frame(MSG_PONG, payload)));
+        }
+        MSG_KEYFRAME_REQUEST => {
+            if let Some(s) = screen.as_ref() {
+                s.encoder.request_keyframe();
+            }
+        }
+        other => log::warn!("unknown message type 0x{other:02x} ({} bytes)", payload.len()),
+    }
+    Ok(())
 }

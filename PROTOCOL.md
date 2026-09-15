@@ -41,3 +41,22 @@ Zero-config discovery over UDP port **7742**, independent of the TCP protocol ab
 - Server → unicast reply: `TABSCREEN!` (10 bytes), `u16 tcp_port` (LE), then the UTF-8 hostname.
 
 Needs no mDNS/Avahi and works over any shared broadcast domain, including a USB-tethering link.
+
+## Transport security
+
+The stream port speaks TLS. The server peeks the first byte: `0x16` (TLS ClientHello) starts a secure
+session; anything else is treated as a plaintext discovery probe (kept cheap for subnet scans).
+
+After the TLS handshake, before HELLO:
+
+| type | name           | payload |
+|------|----------------|---------|
+| 0x07 | AUTH_CHALLENGE | server -> `nonce_s` (16 bytes) |
+| 0x08 | AUTH_RESPONSE  | client -> `nonce_c` (16), `mac_c` (32) |
+| 0x09 | AUTH_OK        | server -> `mac_s` (32) |
+| 0x0a | AUTH_FAIL      | server -> reason (UTF-8) |
+
+`token` = base32-decoded pairing code. `fp` = SHA-256 of the server's TLS leaf certificate (each side derives
+it from the negotiated cert). `mac_c = HMAC-SHA256(token, "tabscreen-client" || nonce_s || nonce_c || fp)`;
+`mac_s` uses the label `"tabscreen-server"`. Binding `fp` into the MAC defeats a man-in-the-middle: a proxy
+with its own certificate cannot produce a valid MAC without the code.

@@ -24,6 +24,7 @@ class StreamActivity : AppCompatActivity(), SurfaceHolder.Callback, Connection.L
         const val EXTRA_SEND_TOUCH = "sendTouch"
         const val EXTRA_MODE = "mode"
         const val EXTRA_AUDIO = "audio"
+        const val EXTRA_PAIR = "pair"
         private const val TAG = "StreamActivity"
     }
 
@@ -114,10 +115,11 @@ class StreamActivity : AppCompatActivity(), SurfaceHolder.Callback, Connection.L
         Log.i(TAG, "display ${width}x$height @${refresh}Hz, ${"%.0f".format(widthMm)}x${"%.0f".format(heightMm)}mm, codecs=$codecs preferred=$preferred")
         val audioMode = intent.getIntExtra(EXTRA_AUDIO, Protocol.AUDIO_NONE)
         val hello = Protocol.hello(width, height, refresh, codecs, preferred, widthMm, heightMm, mode, audioMode)
+        val pair = intent.getStringExtra(EXTRA_PAIR) ?: ""
         val host = intent.getStringExtra(EXTRA_HOST) ?: "127.0.0.1"
         val port = intent.getIntExtra(EXTRA_PORT, 7741)
         overlay.text = "Connecting to $host:$port…"
-        connection = Connection(host, port, hello, this).also { it.start() }
+        connection = Connection(host, port, pair, hello, this).also { it.start() }
         ui.postDelayed(pinger, 2000)
         if (mode == Protocol.MODE_TOUCHPAD) {
             ui.postDelayed({ overlay.text = "Touchpad\ntap = click · two fingers = scroll / right-click · three/four fingers = KDE gestures" }, 1500)

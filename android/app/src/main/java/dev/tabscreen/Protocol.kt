@@ -15,6 +15,11 @@ object Protocol {
     const val MSG_TOUCH = 0x03
     const val MSG_PING = 0x04
     const val MSG_KEYFRAME_REQUEST = 0x05
+    const val MSG_DISCOVER = 0x06
+    const val MSG_AUTH_CHALLENGE = 0x07
+    const val MSG_AUTH_RESPONSE = 0x08
+    const val MSG_AUTH_OK = 0x09
+    const val MSG_AUTH_FAIL = 0x0a
 
     const val MSG_STREAM_CONFIG = 0x81
     const val MSG_VIDEO = 0x82

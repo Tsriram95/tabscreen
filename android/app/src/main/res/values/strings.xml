@@ -7,6 +7,7 @@
     <string name="codec_label">Video codec</string>
     <string name="mode_label">Use the tablet as</string>
     <string name="audio_label">Play computer audio on</string>
+    <string name="pair_hint">Pairing code (shown on the computer)</string>
     <string name="conn_label">Connection</string>
     <string name="scan">Scan for computers</string>
     <string name="conn_usb_hint">USB: enable <b>USB tethering</b> (Settings → Connections → Mobile Hotspot and Tethering), plug into the computer, then tap Scan. Or, with USB debugging on, run <b>adb reverse tcp:7741 tcp:7741</b> on the computer and this uses 127.0.0.1.</string>

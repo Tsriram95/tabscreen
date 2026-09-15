@@ -10,6 +10,7 @@ use ksni::{MenuItem, ToolTip, Tray};
 
 struct TabTray {
     control: SessionControl,
+    pairing_code: String,
 }
 
 impl Tray for TabTray {
@@ -40,6 +41,12 @@ impl Tray for TabTray {
                 ..Default::default()
             }
             .into(),
+            StandardItem {
+                label: format!("Pairing code: {}", self.pairing_code),
+                enabled: false,
+                ..Default::default()
+            }
+            .into(),
             MenuItem::Separator,
             StandardItem {
                 label: "Disconnect tablet".into(),
@@ -65,8 +72,8 @@ impl Tray for TabTray {
 }
 
 /// Start the tray. Returns Ok even when unsupported — the server does not need it.
-pub fn spawn(control: SessionControl) -> anyhow::Result<()> {
-    let handle = TabTray { control: control.clone() }
+pub fn spawn(control: SessionControl, pairing_code: String) -> anyhow::Result<()> {
+    let handle = TabTray { control: control.clone(), pairing_code }
         .spawn()
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     // Let status changes re-render the tray (title/tooltip/menu) live.
