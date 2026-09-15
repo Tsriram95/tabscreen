@@ -3,6 +3,7 @@ mod discovery;
 mod kde;
 mod protocol;
 mod trust;
+mod tray;
 mod uinput;
 mod video;
 mod wayland;
@@ -13,6 +14,67 @@ use std::io::{Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+
+/// Shared handle to the current tablet session, used by the tray to show status
+/// and to disconnect on demand.
+#[derive(Clone, Default)]
+pub struct SessionControl {
+    inner: Arc<Mutex<SessionInner>>,
+}
+
+#[derive(Default)]
+struct SessionInner {
+    sock: Option<TcpStream>,
+    status: String,
+    refresh: Option<Arc<dyn Fn() + Send + Sync>>,
+}
+
+impl SessionControl {
+    fn refresh(&self) {
+        let cb = self.inner.lock().unwrap().refresh.clone();
+        if let Some(cb) = cb {
+            cb();
+        }
+    }
+    fn set_refresh(&self, f: impl Fn() + Send + Sync + 'static) {
+        self.inner.lock().unwrap().refresh = Some(Arc::new(f));
+    }
+    /// A client connected; register its socket (a clone) so it can be shut down.
+    fn connected(&self, sock: TcpStream, status: String) {
+        {
+            let mut g = self.inner.lock().unwrap();
+            g.sock = Some(sock);
+            g.status = status;
+        }
+        self.refresh();
+    }
+    fn set_status(&self, status: String) {
+        self.inner.lock().unwrap().status = status;
+        self.refresh();
+    }
+    fn cleared(&self, status: String) {
+        {
+            let mut g = self.inner.lock().unwrap();
+            g.sock = None;
+            g.status = status;
+        }
+        self.refresh();
+    }
+    /// Force the active session's socket closed (unblocks its read loop).
+    fn disconnect(&self) {
+        let sock = self.inner.lock().unwrap().sock.take();
+        if let Some(sock) = sock {
+            let _ = sock.shutdown(Shutdown::Both);
+            log::info!("tray requested disconnect");
+        }
+    }
+    fn is_connected(&self) -> bool {
+        self.inner.lock().unwrap().sock.is_some()
+    }
+    fn status(&self) -> String {
+        self.inner.lock().unwrap().status.clone()
+    }
+}
 
 use protocol::*;
 use video::{Codec, Convert, Encoder, Settings};
@@ -61,6 +123,9 @@ struct Args {
     /// Never stream audio, whatever the tablet asks for
     #[arg(long)]
     no_audio: bool,
+    /// Do not show a system-tray icon
+    #[arg(long)]
+    no_tray: bool,
     /// Full GStreamer pipeline override ("{node}" is replaced; must end in `appsink name=sink`)
     #[arg(long)]
     gst: Option<String>,
@@ -84,17 +149,27 @@ fn main() -> Result<()> {
     if let Err(e) = discovery::spawn(args.port) {
         log::warn!("auto-discovery unavailable: {e:#} — enter the IP manually in the app");
     }
+
+    let control = SessionControl::default();
+    control.set_status("Waiting for a tablet…".into());
+    if !args.no_tray {
+        if let Err(e) = tray::spawn(control.clone()) {
+            log::warn!("system-tray icon unavailable: {e} — use `systemctl --user stop tabscreen` or --no-tray");
+        }
+    }
+
     log::info!("listening on {}:{} — connect from the tablet app", args.bind, args.port);
     for conn in listener.incoming() {
         match conn {
             Ok(sock) => {
                 let peer = sock.peer_addr().map(|a| a.to_string()).unwrap_or_default();
                 log::info!("client connected from {peer}");
-                if let Err(e) = handle_client(sock, &args) {
+                if let Err(e) = handle_client(sock, &args, &control) {
                     log::error!("session with {peer} ended: {e:#}");
                 } else {
                     log::info!("session with {peer} ended");
                 }
+                control.cleared("Waiting for a tablet…".into());
             }
             Err(e) => log::warn!("accept failed: {e}"),
         }
@@ -210,7 +285,7 @@ fn start_touchpad(_hello: &Hello) -> Result<uinput::Touchpad> {
     uinput::Touchpad::new()
 }
 
-fn handle_client(mut sock: TcpStream, args: &Args) -> Result<()> {
+fn handle_client(mut sock: TcpStream, args: &Args, control: &SessionControl) -> Result<()> {
     sock.set_nodelay(true)?;
     let (ty, payload) = read_frame(&mut sock)?;
     if ty == MSG_DISCOVER {
@@ -233,6 +308,11 @@ fn handle_client(mut sock: TcpStream, args: &Args) -> Result<()> {
     }
     let hello = parse_hello(&payload)?;
     log::info!("tablet: {hello:?}");
+
+    // Register the session with the tray so it can show status and disconnect.
+    let peer = sock.peer_addr().map(|a| a.ip().to_string()).unwrap_or_else(|_| "tablet".into());
+    let mode_label = if hello.mode == MODE_TOUCHPAD { "Touchpad" } else { "Second screen" };
+    control.connected(sock.try_clone()?, format!("Connected: {peer} — {mode_label}"));
 
     let (tx, rx) = mpsc::channel::<Outgoing>();
 

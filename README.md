@@ -57,6 +57,12 @@ Download `tabscreen.apk` from the [Releases page](https://github.com/Tsriram95/t
   - *adb reverse*: with USB debugging on, run `adb reverse tcp:7741 tcp:7741` on the computer; the app uses `127.0.0.1`.
 - **Manual IP** — type the address (`ip -4 addr`) and port, for when broadcast is blocked (e.g. some corporate Wi-Fi).
 
+## System tray
+
+While the server runs, a **TabScreen** icon sits in the KDE system tray. It shows the current status
+(waiting / connected client + mode) and its menu offers **Disconnect tablet** (drop the active session)
+and **Quit TabScreen server**. Disable it with `--no-tray` (e.g. for a truly headless box).
+
 ## Running it persistently
 
 The installer sets this up for you. To do it by hand, or to manage it:

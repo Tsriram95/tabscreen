@@ -18,6 +18,7 @@ gstreamer = "0.24"
 gstreamer-app = "0.24"
 gstreamer-video = "0.24"
 serde_json = "1"
+ksni = { version = "0.3", default-features = false, features = ["blocking", "tokio"] }
 
 [profile.release]
 opt-level = 3
