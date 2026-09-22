@@ -3,8 +3,7 @@
 //! also mixes in the server certificate fingerprint, so a man-in-the-middle that
 //! presents its own certificate cannot complete the handshake without the code.
 
-use anyhow::{anyhow, bail, Context, Result};
-use data_encoding::BASE32_NOPAD;
+use anyhow::{bail, Context, Result};
 use hmac::{Hmac, Mac};
 use rand::RngCore;
 use sha2::{Digest, Sha256};
@@ -19,8 +18,21 @@ use crate::protocol::*;
 
 type HmacSha256 = Hmac<Sha256>;
 
-const TOKEN_BYTES: usize = 10; // 80-bit pairing code -> 16 base32 chars
 const NONCE_LEN: usize = 16;
+const CODE_LEN: usize = 6;
+/// Unambiguous alphabet: no O/0, I/1, or similar look-alikes.
+const CODE_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+fn generate_code() -> String {
+    let mut rng = rand::thread_rng();
+    (0..CODE_LEN)
+        .map(|_| CODE_ALPHABET[(rng.next_u32() as usize) % CODE_ALPHABET.len()] as char)
+        .collect()
+}
+
+fn is_valid_code(s: &str) -> bool {
+    s.len() == CODE_LEN && s.bytes().all(|b| CODE_ALPHABET.contains(&b))
+}
 
 fn config_dir() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
@@ -67,32 +79,27 @@ impl Credentials {
             .with_single_cert(certs, key)
             .context("building TLS config")?;
 
-        // Pairing token: persisted base32 code.
+        // Pairing code: a short, unambiguous code. The code string itself
+        // (uppercase, no separators) is the HMAC key, so both sides agree
+        // without any decoding step.
         let token_path = dir.join("pair_token");
-        let pairing_code = if let Ok(s) = std::fs::read_to_string(&token_path) {
-            s.trim().to_string()
-        } else {
-            let mut raw = [0u8; TOKEN_BYTES];
-            rand::thread_rng().fill_bytes(&mut raw);
-            let code = BASE32_NOPAD.encode(&raw);
-            write_private(&token_path, code.as_bytes())?;
-            code
+        let stored = std::fs::read_to_string(&token_path).ok().map(|s| s.trim().to_uppercase());
+        let pairing_code = match stored {
+            Some(s) if is_valid_code(&s) => s,
+            _ => {
+                let code = generate_code();
+                write_private(&token_path, code.as_bytes())?;
+                code
+            }
         };
-        let token = BASE32_NOPAD
-            .decode(pairing_code.as_bytes())
-            .map_err(|_| anyhow!("corrupt pairing token; delete {}", token_path.display()))?;
+        let token = pairing_code.as_bytes().to_vec();
 
         Ok(Self { tls_config: Arc::new(tls_config), cert_fingerprint, token, pairing_code })
     }
 
-    /// Human-friendly grouping of the pairing code, e.g. ABCD-EFGH-IJKL-MNOP.
+    /// The pairing code as shown to the user (short enough not to need grouping).
     pub fn pairing_code_grouped(&self) -> String {
-        self.pairing_code
-            .as_bytes()
-            .chunks(4)
-            .map(|c| std::str::from_utf8(c).unwrap())
-            .collect::<Vec<_>>()
-            .join("-")
+        self.pairing_code.clone()
     }
 
     fn mac(&self, label: &[u8], nonce_s: &[u8], nonce_c: &[u8]) -> [u8; 32] {
@@ -142,6 +149,8 @@ pub fn server_handshake<S: Read + Write>(stream: &mut S, creds: &Credentials) ->
     let expect_c = creds.mac(b"tabscreen-client", &nonce_s, nonce_c);
     // Constant-time compare.
     if !bool::from(subtle_eq(mac_c, &expect_c)) {
+        // Rate-limit online guessing: a short code is only safe if wrong tries are slow.
+        std::thread::sleep(std::time::Duration::from_millis(1500));
         write_frame(stream, MSG_AUTH_FAIL, b"pairing code mismatch")?;
         bail!("client failed pairing (wrong or missing code)");
     }

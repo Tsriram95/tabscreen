@@ -60,8 +60,8 @@ Download `tabscreen.apk` from the [Releases page](https://github.com/Tsriram95/t
 ## Security
 
 Every connection is **encrypted with TLS** and gated by a **pairing code**. On first run the server
-generates a self-signed certificate and a pairing code (both stored in `~/.config/tabscreen/`, shown in
-the tray, the logs, or via `tabscreen-server --show-pair`). Enter that code once in the app. The code is a
+generates a self-signed certificate and a short 6-character pairing code (both stored in `~/.config/tabscreen/`, shown in
+the tray, the logs, or via `tabscreen-server --show-pair`). Enter that code once in the app. Wrong codes are rate-limited (a deliberate delay per failed attempt) so the short code can't be guessed over the network. The code is a
 shared secret bound by HMAC to the server's certificate fingerprint, so an unauthorized client is refused
 and a man-in-the-middle presenting a different certificate cannot authenticate. This makes it safe to use on
 untrusted/public networks. (Discovery probes remain unauthenticated but only reveal the hostname.)

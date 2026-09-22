@@ -56,7 +56,7 @@ After the TLS handshake, before HELLO:
 | 0x09 | AUTH_OK        | server -> `mac_s` (32) |
 | 0x0a | AUTH_FAIL      | server -> reason (UTF-8) |
 
-`token` = base32-decoded pairing code. `fp` = SHA-256 of the server's TLS leaf certificate (each side derives
+`token` = the pairing code as UTF-8 bytes (uppercase, separators removed) — a 6-character code from an unambiguous alphabet. `fp` = SHA-256 of the server's TLS leaf certificate (each side derives
 it from the negotiated cert). `mac_c = HMAC-SHA256(token, "tabscreen-client" || nonce_s || nonce_c || fp)`;
 `mac_s` uses the label `"tabscreen-server"`. Binding `fp` into the MAC defeats a man-in-the-middle: a proxy
 with its own certificate cannot produce a valid MAC without the code.

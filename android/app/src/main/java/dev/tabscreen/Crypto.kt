@@ -3,28 +3,12 @@ package dev.tabscreen
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/** RFC 4648 base32 (no padding) + HMAC-SHA256 helpers for pairing. */
+/** Pairing helpers: HMAC-SHA256 over the pairing-code key. */
 object Crypto {
-    private const val ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    /** The pairing code (case/dash/space-insensitive) as raw HMAC-key bytes. */
+    fun decodePairingCode(code: String): ByteArray =
+        code.trim().uppercase().replace("-", "").replace(" ", "").toByteArray(Charsets.US_ASCII)
 
-    /** Decode a pairing code (dashes/spaces/case ignored) to the raw token bytes. */
-    fun decodePairingCode(code: String): ByteArray {
-        val s = code.trim().uppercase().replace("-", "").replace(" ", "")
-        val out = ArrayList<Byte>(s.length * 5 / 8)
-        var buffer = 0
-        var bits = 0
-        for (c in s) {
-            val v = ALPHABET.indexOf(c)
-            require(v >= 0) { "invalid character in pairing code: $c" }
-            buffer = (buffer shl 5) or v
-            bits += 5
-            if (bits >= 8) {
-                bits -= 8
-                out.add(((buffer ushr bits) and 0xFF).toByte())
-            }
-        }
-        return out.toByteArray()
-    }
 
     fun hmacSha256(key: ByteArray, vararg parts: ByteArray): ByteArray {
         val mac = Mac.getInstance("HmacSHA256")
